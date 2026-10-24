@@ -29,6 +29,7 @@ const charset = "abcdefghijklmnopqrstuvwzyx1234567890"
 func main() {
 	http.HandleFunc("POST /shorten", HandlerShortener)
 	http.HandleFunc("GET /{code}", HandlerGetLinkRedirect)
+	http.HandleFunc("GET /info/{code}", HandlerGetInfo)
 
 	log.Println("Server is listening on :8000")
 	err := http.ListenAndServe(":8000", nil)
@@ -139,7 +140,7 @@ func HandlerShortener(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonInBytes)
 }
 
-func HandlerGetLink(w http.ResponseWriter, r *http.Request) {
+func HandlerGetInfo(w http.ResponseWriter, r *http.Request) {
 	// ambil request
 	var codeReq string = r.PathValue("code")
 	// cari di StoredValue apakah ada
