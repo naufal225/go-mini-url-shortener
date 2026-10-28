@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 type ShortenerRequest struct {
@@ -22,6 +23,7 @@ type GetLinkResponse struct {
 	Link string
 }
 
+var Mu sync.Mutex
 var StoredValue map[string]string = make(map[string]string)
 
 const charset = "abcdefghijklmnopqrstuvwzyx1234567890"
@@ -100,32 +102,39 @@ func HandlerShortener(w http.ResponseWriter, r *http.Request) {
 
 	// cek apakah link udah ada
 	var ada bool = false
+	var foundCode string
+	Mu.Lock()
 	for code, val := range StoredValue {
 		if val == link {
-			// kalau ada balikkin itu aja
-			var res ShortenerResponse = ShortenerResponse{Code: code}
-
-			jsonInBytes, err := json.Marshal(&res)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			w.Write(jsonInBytes)
+			// ambil
+			foundCode = code
 			ada = true
 			break
 		}
 	}
+	Mu.Unlock()
 
 	if ada {
+		var res ShortenerResponse = ShortenerResponse{Code: foundCode}
+
+		jsonInBytes, err := json.Marshal(&res)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write(jsonInBytes)
+
 		return
 	}
 
 	// ubah jadi pasangan kode dan nilai, simpan ke StoredValue
 	var code = generateCode()
+	Mu.Lock()
 	StoredValue[code] = link
+	Mu.Unlock()
 
 	// return response
 	var res ShortenerResponse = ShortenerResponse{Code: code}
@@ -145,24 +154,35 @@ func HandlerGetInfo(w http.ResponseWriter, r *http.Request) {
 	var codeReq string = r.PathValue("code")
 	// cari di StoredValue apakah ada
 	var ada bool = false
+	var foundCode string
+	var foundLink string
+	Mu.Lock()
 	for code, val := range StoredValue {
 		if code == codeReq {
-			// kalau ada balikkin itu
-			var res GetLinkResponse = GetLinkResponse{Code: code, Link: val}
+			// ambil
+			foundCode = code
+			foundLink = val
 
-			jsonInBytes, err := json.Marshal(&res)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusFound)
-			w.Write(jsonInBytes)
 			ada = true
 			break
 		}
 	}
+	Mu.Unlock()
+
+	if ada {
+		var res GetLinkResponse = GetLinkResponse{Code: foundCode, Link: foundLink}
+
+		jsonInBytes, err := json.Marshal(&res)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusFound)
+		w.Write(jsonInBytes)
+	}
+
 	// kalau ga ada return 404
 	if !ada {
 		var message map[string]string = map[string]string{
@@ -187,6 +207,7 @@ func HandlerGetLinkRedirect(w http.ResponseWriter, r *http.Request) {
 	// cari di StoredValue apakah ada
 	var ada bool = false
 	var foundedLink string = ""
+	Mu.Lock()
 	for code, link := range StoredValue {
 		if code == codeReq {
 
@@ -195,6 +216,7 @@ func HandlerGetLinkRedirect(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	Mu.Unlock()
 
 	if ada {
 		http.Redirect(w, r, foundedLink, http.StatusMovedPermanently)
